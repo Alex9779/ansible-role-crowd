@@ -171,7 +171,7 @@
     - { dest: "/opt/atlassian/crowd/apache-tomcat/conf/server.xml", owner: "crowd", group: "crowd" }
     - { dest: "/opt/atlassian/crowd/start_crowd.sh", owner: "crowd", group: "crowd", mode: "0755" }
   notify:
-    - systemctl daemon-reload
+    - crowd | systemctl daemon-reload
   tags: crowd
 
 - name: prepare files
@@ -194,6 +194,10 @@
     dest: "/opt/atlassian/crowd/version_{{ crowd_version }}"
     state: touch
   when: version_file.stat.exists == false
+  tags: crowd
+
+- name: flush handlers
+  meta: flush_handlers
   tags: crowd
 
 - name: enable service

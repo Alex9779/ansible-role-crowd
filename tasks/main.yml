@@ -14,34 +14,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+- name: include default variables
+  include_vars: "../vars/main.yml"
+  tags: crowd
+
 - name: include release specific variables
-  include_vars: "{{ loop_var }}"
-  with_first_found:
-    - files:
+  include_vars: "{{ lookup('first_found', _params) }}"
+  vars:
+    _params:
+      files:
         - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower }}.yml"
         - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
         - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
         - "{{ ansible_distribution | lower }}.yml"
         - "{{ ansible_os_family | lower }}.yml"
-      paths: "../vars"
-      skip: true
-  loop_control:
-    loop_var: "loop_var"
+      paths:
+        - "../vars"
+  ignore_errors: true
   tags: crowd
 
 - name: include release specific tasks
-  include_tasks: "{{ loop_var }}"
-  with_first_found:
-    - files:
+  include_tasks: "{{ lookup('first_found', _params) }}"
+  vars:
+    _params:
+      files:
         - "{{ ansible_distribution | lower }}-{{ ansible_distribution_version | lower }}.yml"
         - "{{ ansible_distribution | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
         - "{{ ansible_os_family | lower }}-{{ ansible_distribution_major_version | lower }}.yml"
         - "{{ ansible_distribution | lower }}.yml"
         - "{{ ansible_os_family | lower }}.yml"
-      paths: "."
-      skip: true
-  loop_control:
-    loop_var: "loop_var"
+      paths:
+        - "."
+  ignore_errors: true
   tags: crowd
 
 - name: groupadd
@@ -92,13 +96,16 @@
     group: "{{ item.group | default('root') }}"
     mode: "{{ item.mode | default('0755') }}"
     state: "{{ item.state | default('directory') }}"
-  with_items:
+  loop:
     - { dest: "/etc/init.d" }
     - { dest: "/lib/systemd/system" }
     - { dest: "/opt/atlassian/crowd", owner: "crowd", group: "crowd" }
     - { dest: "/opt/atlassian/crowd/apache-tomcat/bin", owner: "crowd", group: "crowd", mode: "0775" }
     - { dest: "/opt/atlassian/crowd/apache-tomcat/conf", owner: "crowd", group: "crowd", mode: "0775" }
     - { dest: "/var/atlassian/application-data/crowd", owner: "crowd", group: "crowd" }
+    - { dest: "{{ crowd_download.dest | dirname }}" }
+    - { dest: "{{ mysql_jdbc_download.dest | dirname }}" }
+    - { dest: "{{ postgresql_jdbc_download.dest | dirname }}" }
   tags: crowd
 
 - name: download archive
@@ -106,7 +113,7 @@
     url: "{{ item.url }}"
     dest: "{{ item.dest }}"
     checksum: "{{ item.checksum }}"
-  with_items:
+  loop:
     - "{{ crowd_download }}"
     - "{{ mysql_jdbc_download }}"
     - "{{ postgresql_jdbc_download }}"
@@ -131,6 +138,9 @@
     executable: "/bin/bash"
     creates: "/opt/atlassian/crowd/start_crowd.sh"
   when: version_file.stat.exists == false
+  notify:
+    - crowd | systemctl daemon-reload
+    - crowd | systemctl restart
   tags: crowd
 
 - name: patch /opt/atlassian/crowd/build.properties
@@ -140,6 +150,9 @@
     line: "crowd.url=http://localhost:8095{{ crowd_catalina_context_path or '' }}"
     state: present
   register: lineinfile_result
+  notify:
+    - crowd | systemctl daemon-reload
+    - crowd | systemctl restart
   tags: crowd
 
 - name: update build with ant
@@ -155,16 +168,19 @@
   when: lineinfile_result is changed
   register: result
   changed_when: result is not succeeded
+  notify:
+    - crowd | systemctl daemon-reload
+    - crowd | systemctl restart
   tags: crowd
 
 - name: copy templates
   template:
-    src: "./templates{{ item.dest }}.j2"
     dest: "{{ item.dest }}"
+    src: "{{ item.src | default('./templates' + item.dest + '.j2') }}"
     owner: "{{ item.owner | default('root') }}"
     group: "{{ item.group | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
-  with_items:
+  loop:
     - { dest: "/etc/init.d/crowd", mode: "0755" }
     - { dest: "/lib/systemd/system/crowd.service" }
     - { dest: "/opt/atlassian/crowd/apache-tomcat/bin/setenv.sh", owner: "crowd", group: "crowd", mode: "0755" }
@@ -172,6 +188,7 @@
     - { dest: "/opt/atlassian/crowd/start_crowd.sh", owner: "crowd", group: "crowd", mode: "0755" }
   notify:
     - crowd | systemctl daemon-reload
+    - crowd | systemctl restart
   tags: crowd
 
 - name: prepare files
@@ -181,7 +198,7 @@
     group: "{{ item.group | default('root') }}"
     mode: "{{ item.mode | default('0644') }}"
     state: "{{ item.state | default('file') }}"
-  with_items:
+  loop:
     - { dest: "/etc/init.d/crowd", mode: "0755" }
     - { dest: "/lib/systemd/system/crowd.service" }
     - { dest: "/opt/atlassian/crowd/apache-tomcat/bin/setenv.sh", owner: "crowd", group: "crowd", mode: "0755" }
@@ -202,8 +219,10 @@
 
 - name: enable service
   service:
-    name: crowd
+    name: "{{ item.name }}"
     enabled: true
+  loop:
+    - { name: "crowd" }
   changed_when: false
   ignore_errors: true
   tags: crowd

@@ -1,8 +1,37 @@
 # Ansible Role for Crowd
 
-## 2.7.0 - TBC
+## 3.3.0 - TBC
 
 ### Major Changes
+
+  - Download archives to `/var/cache/ansible`
+
+## 3.2.0 - 2019-07-08
+
+### Major Changes
+
+  - Update LXD test profile for Kubernetes v1.15.0 support
+  - Add dummy tasks and vars placeholder for multi OS support
+  - Fix molecule `group_vars` with links
+  - Replace `with_items` with `loop`
+  - Replace `with_dict` with `var`
+  - Replace `with_first_found` with `lookup('first_found')`
+
+## 3.1.0 - 2019-06-13
+
+### Major Changes
+
+  - Always include default variables from `vars/main.yml`
+  - Always use `become: true` with molecule, especially for vagrant
+  - Abstract archive download checksum with multiple version support
+  - Improve service restart implementation
+
+## 3.0.0 - 2019-05-20
+
+### Major Changes
+
+  - Upgrade minimal Ansible support to 2.8.0
+  - Improve handlers implementation
 
 ## 2.6.0 - 2019-05-04
 
